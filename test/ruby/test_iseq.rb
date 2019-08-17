@@ -281,6 +281,32 @@ class TestISeq < Test::Unit::TestCase
     end;
   end
 
+  def test_eval_with_binding_struct
+    obj = Struct.new(:a, :b).new(1, 2)
+    bind = obj.instance_eval {binding}
+    iseq = RubyVM::InstructionSequence.compile("a + b")
+    val = iseq.eval(bind)
+    assert_equal(3, val)
+  end
+
+  def test_eval_with_binding_locals
+    def bind
+      a = 1
+      b = 2
+      binding
+    end
+
+    puts bind.local_variables
+    iseq = RubyVM::InstructionSequence.compile("a + b")
+    val = iseq.eval(bind)
+    assert_equal(3, val)
+  end
+
+  def test_eval_with_nil_binding
+    val = RubyVM::InstructionSequence.compile("1 + 2").eval(nil)
+    assert_equal(3, val)
+  end
+
   def test_inspect
     %W[foo \u{30d1 30b9}].each do |name|
       assert_match(/@#{name}/, ISeq.compile("", name).inspect, name)
@@ -431,6 +457,16 @@ class TestISeq < Test::Unit::TestCase
   def test_to_binary_with_objects
     assert_iseq_to_binary("[]"+100.times.map{|i|"<</#{i}/"}.join)
     assert_iseq_to_binary("@x ||= (1..2)")
+  end
+
+  def test_to_binary_pattern_matching
+    code = "case foo in []; end"
+    iseq = compile(code)
+    assert_include(iseq.disasm, "TypeError")
+    assert_include(iseq.disasm, "NoMatchingPatternError")
+    EnvUtil.suppress_warning do
+      assert_iseq_to_binary(code, "[Feature #14912]")
+    end
   end
 
   def test_to_binary_line_info
