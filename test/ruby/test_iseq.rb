@@ -281,10 +281,24 @@ class TestISeq < Test::Unit::TestCase
     end;
   end
 
-  def test_eval_with_binding
+  def test_eval_with_binding_struct
     obj = Struct.new(:a, :b).new(1, 2)
     bind = obj.instance_eval {binding}
-    val = RubyVM::InstructionSequence.compile("a + b").eval(bind)
+    iseq = RubyVM::InstructionSequence.compile("a + b")
+    val = iseq.eval(bind)
+    assert_equal(3, val)
+  end
+
+  def test_eval_with_binding_locals
+    def bind
+      a = 1
+      b = 2
+      binding
+    end
+
+    puts bind.local_variables
+    iseq = RubyVM::InstructionSequence.compile("a + b")
+    val = iseq.eval(bind)
     assert_equal(3, val)
   end
 
