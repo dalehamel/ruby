@@ -1332,17 +1332,17 @@ rb_iseqw_to_iseq(VALUE iseqw)
 }
 /*
  *  call-seq:
- *     iseq.bind(obj) -> iseq
+ *     iseq.bind(obj) -> self // FIXME is this idiomatic?
  *
  *  Binds a receiver to the instruction sequence for when it is
- *  called or evaluated.
+ *  called or evaluated. Returns the bound instance.
  *
  */
 static VALUE
 iseqw_bind_receiver(VALUE receiver, VALUE self)
 {
-  rb_secure(1);
-  return self;
+    rb_secure(1);
+    return rb_iseq_bind(self, receiver);
 }
 
 /*
@@ -1359,39 +1359,19 @@ iseqw_call(int argc, const VALUE *argv, VALUE self)
     return rb_iseq_call(iseqw_check(self), argc, argv);
 }
 
-// FIXME revert this
 /*
  *  call-seq:
- *     iseq.eval([binding]) -> obj
+ *     iseq.eval -> obj
  *
  *  Evaluates the instruction sequence and returns the result.
  *
  *      RubyVM::InstructionSequence.compile("1 + 2").eval #=> 3
- *
- *  If <em>binding</em> is given, which must be a Binding object, the
- *  evaluation is performed in its context.
- *
- *      obj = Struct.new(:a, :b).new(1, 2)
- *      bind = obj.instance_eval {binding}
- *      RubyVM::InstructionSequence.compile("a + b").eval(bind) #=> 3
  */
 static VALUE
-iseqw_eval(int argc, const VALUE *argv, VALUE self)
+iseqw_eval(VALUE self)
 {
-    VALUE scope;
-
-    rb_check_arity(argc, 0, 1);
     rb_secure(1);
-
-    if (argc == 1) {
-        rb_scan_args(argc, argv, "1", &scope);
-    }
-    if (argc == 0 || scope == Qnil) {
-        return rb_iseq_eval(iseqw_check(self));
-    }
-    else {
-        return rb_iseq_eval_in_scope(iseqw_check(self), scope);
-    }
+    return rb_iseq_eval(iseqw_check(self));
 }
 
 /*

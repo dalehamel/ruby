@@ -2138,12 +2138,10 @@ rb_iseq_eval(const rb_iseq_t *iseq)
 }
 
 VALUE
-rb_iseq_bind(const rb_iseq_t *iseq, VALUE receiver)
+rb_iseq_bind(rb_iseq_t *iseq, VALUE receiver)
 {
-  rb_iseq_t *iseq = iseqw_check(self)
-  iseq->receiver = &receiver;
-
-  return Qnil; //FIXME how to have this return VALUE version of iseq?
+    iseq->receiver = &receiver; // FIXME how will this affect references for GC?
+    return iseq; // iseq with receiver bound
 }
 
 VALUE
@@ -2153,8 +2151,9 @@ rb_iseq_call(const rb_iseq_t *iseq, int argc, const VALUE *argv)
     rb_binding_t *bind;
     rb_control_frame_t *cfp;
 
+    // Push any arguments onto the stack
+    // FIXME this code is duplicated
     if (argc > 0) {
-        // Push any arguments onto the stack
         cfp = ec->cfp;
         VALUE *sp = cfp->sp;
 
@@ -2163,7 +2162,7 @@ rb_iseq_call(const rb_iseq_t *iseq, int argc, const VALUE *argv)
         CHECK_VM_STACK_OVERFLOW(cfp, argc);
         vm_check_canary(ec, sp);
         cfp->sp = sp + argc;
-        for (i=0; i<argc; i++) {
+        for (int i=0; i<argc; i++) {
             sp[i] = argv[i];
         }
         cfp->sp = sp;
@@ -2179,7 +2178,7 @@ rb_iseq_call(const rb_iseq_t *iseq, int argc, const VALUE *argv)
             vm_bind_update_env(iseq->receiver, bind, vm_make_env_object(ec, ec->cfp));
         }
     } else {
-      vm_set_main_stack(ec, iseq);
+        vm_set_main_stack(ec, iseq);
     }
 
     return vm_exec(ec, TRUE);
