@@ -2138,6 +2138,54 @@ rb_iseq_eval(const rb_iseq_t *iseq)
 }
 
 VALUE
+rb_iseq_bind(const rb_iseq_t *iseq, VALUE receiver)
+{
+  rb_iseq_t *iseq = iseqw_check(self)
+  iseq->receiver = &receiver;
+
+  return Qnil; //FIXME how to have this return VALUE version of iseq?
+}
+
+VALUE
+rb_iseq_call(const rb_iseq_t *iseq, int argc, const VALUE *argv)
+{
+    rb_execution_context_t *ec = GET_EC();
+    rb_binding_t *bind;
+    rb_control_frame_t *cfp;
+
+    if (argc > 0) {
+        // Push any arguments onto the stack
+        cfp = ec->cfp;
+        VALUE *sp = cfp->sp;
+
+        stack_check(ec);
+
+        CHECK_VM_STACK_OVERFLOW(cfp, argc);
+        vm_check_canary(ec, sp);
+        cfp->sp = sp + argc;
+        for (i=0; i<argc; i++) {
+            sp[i] = argv[i];
+        }
+        cfp->sp = sp;
+    }
+
+    if (iseq->receiver != NULL) {
+        GetBindingPtr(iseq->receiver, bind);
+
+        vm_set_eval_stack(ec, iseq, NULL, &bind->block);
+
+        /* save new env */
+        if (iseq->body->local_table_size > 0) {
+            vm_bind_update_env(iseq->receiver, bind, vm_make_env_object(ec, ec->cfp));
+        }
+    } else {
+      vm_set_main_stack(ec, iseq);
+    }
+
+    return vm_exec(ec, TRUE);
+}
+
+VALUE
 rb_iseq_eval_in_scope(const rb_iseq_t *iseq, VALUE scope)
 {
     rb_execution_context_t *ec = GET_EC();

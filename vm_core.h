@@ -495,6 +495,8 @@ struct rb_iseq_struct {
             rb_event_flag_t global_trace_events;
         } exec;
     } aux;
+
+    VALUE *receiver; // 6th word - is this attempting to align structs?
 };
 
 #ifndef USE_LAZY_LOAD
@@ -1617,8 +1619,9 @@ NORETURN(void rb_bug_context(const void *, const char *fmt, ...));
 
 /* functions about thread/vm execution */
 RUBY_SYMBOL_EXPORT_BEGIN
+VALUE rb_iseq_call(const rb_iseq_t *iseq, int argc, const VALUE *argv);
+VALUE rb_iseq_bind(const rb_iseq_t *iseq, VALUE receiver); // FIXME if this works allow constructor to accept a receiver arg and call this
 VALUE rb_iseq_eval(const rb_iseq_t *iseq);
-VALUE rb_iseq_eval_in_scope(const rb_iseq_t *iseq, VALUE scope);
 VALUE rb_iseq_eval_main(const rb_iseq_t *iseq);
 VALUE rb_iseq_path(const rb_iseq_t *iseq);
 VALUE rb_iseq_realpath(const rb_iseq_t *iseq);

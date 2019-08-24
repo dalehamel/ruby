@@ -428,6 +428,7 @@ iseq_alloc(void)
 {
     rb_iseq_t *iseq = iseq_imemo_alloc();
     iseq->body = ZALLOC(struct rb_iseq_constant_body);
+    iseq->receiver = NULL;
     return iseq;
 }
 
@@ -1329,7 +1330,36 @@ rb_iseqw_to_iseq(VALUE iseqw)
 {
     return iseqw_check(iseqw);
 }
+/*
+ *  call-seq:
+ *     iseq.bind(obj) -> iseq
+ *
+ *  Binds a receiver to the instruction sequence for when it is
+ *  called or evaluated.
+ *
+ */
+static VALUE
+iseqw_bind_receiver(VALUE receiver, VALUE self)
+{
+  rb_secure(1);
+  return self;
+}
 
+/*
+ *  call-seq:
+ *     iseq.call(...) -> obj
+ *
+ *  Evaluates the instruction sequence with optional arguments.
+ *
+ */
+static VALUE
+iseqw_call(int argc, const VALUE *argv, VALUE self)
+{
+    rb_secure(1);
+    return rb_iseq_call(iseqw_check(self), argc, argv);
+}
+
+// FIXME revert this
 /*
  *  call-seq:
  *     iseq.eval([binding]) -> obj
@@ -3503,7 +3533,9 @@ Init_ISeq(void)
     rb_define_method(rb_cISeq, "disasm", iseqw_disasm, 0);
     rb_define_method(rb_cISeq, "disassemble", iseqw_disasm, 0);
     rb_define_method(rb_cISeq, "to_a", iseqw_to_a, 0);
-    rb_define_method(rb_cISeq, "eval", iseqw_eval, -1);
+    rb_define_method(rb_cISeq, "eval", iseqw_eval, 0);
+    rb_define_method(rb_cISeq, "bind", iseqw_bind_receiver, 1);
+    rb_define_method(rb_cISeq, "call", iseqw_call, -1);
 
     rb_define_method(rb_cISeq, "to_binary", iseqw_to_binary, -1);
     rb_define_singleton_method(rb_cISeq, "load_from_binary", iseqw_s_load_from_binary, 1);
