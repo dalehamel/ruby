@@ -1039,6 +1039,64 @@ AS_IF([test "$rb_cv_have_stmt_and_decl_in_expr" = yes], [
 ])
 }
 
+# BTF (BPF Type Format) support section
+AC_ARG_WITH(btf,
+    AS_HELP_STRING([--with-btf], [enable BTF debug information (default: auto-detect)]),
+    [with_btf=$withval], [with_btf=auto])
+
+# Check for pahole and llvm-objcopy
+AC_CHECK_PROG(PAHOLE, pahole, pahole)
+AC_CHECK_PROG(LLVM_OBJCOPY, llvm-objcopy, llvm-objcopy)
+
+BTF_SUPPORT=no
+AS_CASE(["$with_btf"],
+    [yes], [
+        AS_IF([test -z "$PAHOLE"], [
+            AC_MSG_ERROR([pahole is required for BTF support but not found])
+        ])
+        AS_IF([test -z "$LLVM_OBJCOPY"], [
+            AC_MSG_ERROR([llvm-objcopy is required for BTF support but not found])
+        ])
+        # Check pahole version
+        pahole_version=`$PAHOLE --version 2>/dev/null | sed -n 's/^v\([[0-9]]*\)\.\([[0-9]]*\).*/\1.\2/p'`
+        AS_IF([test -z "$pahole_version"], [
+            AC_MSG_ERROR([Could not determine pahole version])
+        ])
+        pahole_major=`echo $pahole_version | cut -d. -f1`
+        pahole_minor=`echo $pahole_version | cut -d. -f2`
+        AS_IF([test "$pahole_major" -lt 1 -o \( "$pahole_major" -eq 1 -a "$pahole_minor" -lt 20 \)], [
+            AC_MSG_ERROR([pahole version 1.20 or higher is required for BTF support (found $pahole_version)])
+        ])
+        BTF_SUPPORT=yes
+    ],
+    [no], [
+        BTF_SUPPORT=no
+    ],
+    [auto], [
+        AS_IF([test -n "$PAHOLE" -a -n "$LLVM_OBJCOPY"], [
+            # Check pahole version
+            pahole_version=`$PAHOLE --version 2>/dev/null | sed -n 's/^v\([[0-9]]*\)\.\([[0-9]]*\).*/\1.\2/p'`
+            AS_IF([test -n "$pahole_version"], [
+                pahole_major=`echo $pahole_version | cut -d. -f1`
+                pahole_minor=`echo $pahole_version | cut -d. -f2`
+                AS_IF([test "$pahole_major" -gt 1 -o \( "$pahole_major" -eq 1 -a "$pahole_minor" -ge 20 \)], [
+                    BTF_SUPPORT=yes
+                    AC_MSG_NOTICE([BTF support auto-detected (pahole $pahole_version found)])
+                ], [
+                    AC_MSG_NOTICE([BTF support disabled: pahole version too old ($pahole_version < 1.20)])
+                ])
+            ], [
+                AC_MSG_NOTICE([BTF support disabled: could not determine pahole version])
+            ])
+        ], [
+            AC_MSG_NOTICE([BTF support disabled: required tools not found])
+        ])
+    ],
+    [
+        AC_MSG_ERROR([Invalid value for --with-btf: $with_btf])
+    ]
+)
+
 [begin]_group "header and library section" && {
 AC_ARG_WITH(winnt-ver,
   AS_HELP_STRING([--with-winnt-ver=0xXXXX], [target Windows NT version (default to 0x0600)]),
@@ -1312,6 +1370,36 @@ main()
 		],
 [	LIBS="-lm $LIBS"])
 : ${ORIG_LIBS=$LIBS}
+
+AS_IF([test "$BTF_SUPPORT" = yes], [
+    AC_DEFINE(HAVE_BTF_SUPPORT, 1, [Define if BTF support is enabled])
+    PAHOLE_CMD="$PAHOLE -J"
+
+    # Check for readelf or objdump to detect .BTF section
+    AC_CHECK_PROG(READELF, readelf, readelf)
+    AC_CHECK_PROG(OBJDUMP, objdump, objdump)
+
+    AS_IF([test -n "$READELF"], [
+        BTF_CHECK="$READELF -S \$\$target | grep -q '\.BTF'"
+    ], [test -n "$OBJDUMP"], [
+        BTF_CHECK="$OBJDUMP -h \$\$target | grep -q '\.BTF'"
+    ], [
+        BTF_CHECK="false"  # Always regenerate if we can't check
+    ])
+
+    # Append BTF generation to POSTLINK with .BTF section check
+    AS_IF([test "$enable_shared" = yes], [
+        # For shared library builds
+        POSTLINK="${POSTLINK}${POSTLINK:+; }target=\$(LIBRUBY_SO); if test -f \$\$target && ! ($BTF_CHECK 2>/dev/null); then echo 'Generating BTF debug info for libruby'; $PAHOLE -J \$\$target; fi"
+    ], [
+        # For static builds
+        POSTLINK="${POSTLINK}${POSTLINK:+; }target=\$(PROGRAM); if test -f \$\$target && ! ($BTF_CHECK 2>/dev/null); then echo 'Generating BTF debug info for ruby'; $PAHOLE -J \$\$target; fi"
+    ])
+], [
+    PAHOLE_CMD=":"
+])
+
+AC_SUBST(POSTLINK)
 
 AS_IF([test -n "${POSTLINK}"], [
     # NOTE: A (part of) link commands used link shared extension libraries. If
@@ -4785,6 +4873,7 @@ config_summary "man page type"       "$MANTYPE"
 config_summary "search path"         "$search_path"
 config_summary "static-linked-ext"   ${EXTSTATIC:+"yes"}
 config_summary "BASERUBY -v"         "$BASERUBY_VERSION"
+config_summary "BTF support"         "$BTF_SUPPORT"
 echo ""
 echo "---"
 ])
